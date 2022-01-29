@@ -1,0 +1,77 @@
+az login
+# enable cluster monitoring
+az provider register --namespace Microsoft.OperationsManagement
+az provider register --namespace Microsoft.OperationalInsights
+
+# init variables
+$suffix = "euw-aks-bld-2202"
+$suffix_short = "euwaksbld2202"
+$dns ="techtalk.bld"
+$rg = "rg-$suffix"
+$pubip = "pip-$suffix"
+$vnet = "vnet-$suffix"
+$dnslink = "dns-lnk-$suffix"
+$snet = "snet-$suffix"
+$snetres = "snet-resources-$suffix"
+$acr = "acr$suffix_short"
+$acrhost = "$acr.azurecr.io"
+$aks = "aks-$suffix"
+$sqlsrv = "sqlsrv-$suffix"
+$sqldb = "sqldb-$suffix"
+$location = "westeurope"
+
+# create resource group
+az group create --name $rg --location $location
+
+# create acr
+az acr create -n $acr -g $rg --sku basic
+
+# create vnet
+az network vnet delete --name $vnet --resource-group $rg
+az network vnet create --name $vnet --resource-group $rg --address-prefix 172.16.0.0/16
+az network vnet subnet create --vnet-name $vnet --resource-group $rg --name $snet --address-prefix 172.16.1.0/24
+az network vnet subnet create --vnet-name $vnet --resource-group $rg --name $snetres --address-prefix 172.16.2.0/24
+$snetdetails = az network vnet subnet show --vnet-name $vnet --resource-group $rg --name $snetres | ConvertFrom-Json
+
+# install aks
+az aks create --resource-group $rg `
+    --name $aks `
+    --node-count 1 `
+    --enable-addons monitoring `
+    --enable-managed-identity `
+    --enable-private-cluster `
+    --disable-public-fqdn `
+    --network-plugin azure `
+    --vnet-subnet-id $snetdetails.id 
+
+# attach acr after the managed identity above has been created
+az aks update -n $aks -g $rg --attach-acr $acr
+
+# create azure sql database
+$currentUser = az ad signed-in-user show | ConvertFrom-Json
+az sql server create --enable-ad-only-auth --external-admin-principal-type User --external-admin-name $currentUser.displayName  --external-admin-sid $currentUser.objectId -g $rg -n $sqlsrv
+az sql db create -g $rg -s $sqlsrv -n $sqldb --service-objective S0
+az network vnet subnet update -g $rg --vnet-name $vnet --name $snetres --service-endpoints Microsoft.Sql
+az sql server vnet-rule create --name "sqlvnet-$suffix" -g $rg -s $sqlsrv --subnet $snetres --vnet $vnet
+$sqlsrvDetails = az sql server show -g $rg --name $sqlsrv | ConvertFrom-Json
+az network private-link-resource list -g $rg -n $sqlsrv --type Microsoft.Sql/servers
+az network private-endpoint create `
+    --name "sql-pep-$suffix" `
+    --resource-group $rg `
+    --vnet-name $vnet --subnet $snetres `
+    --private-connection-resource-id $sqlsrvDetails.id `
+    --group-id sqlServer `
+    --connection-name "sql-pep-$suffix"
+$sqlDnsRecord = az network private-endpoint show --name "sql-pep-$suffix" --resource-group $rg | ConvertFrom-Json
+
+# add DNS record for the private link above
+$aksDetails = az aks show -g $rg -n $aks | ConvertFrom-Json
+$nodeResourceGroup = $aksDetails.nodeResourceGroup
+$dnsZones = az network private-dns zone list -g $nodeResourceGroup | ConvertFrom-Json
+az network private-dns record-set a add-record --ipv4-address $sqlDnsRecord.customDnsConfigs[0].ipAddresses[0] --record-set-name bldsql --resource-group $nodeResourceGroup --zone-name $dnsZones[0].name
+
+# install kubetl if you haven't done already; rtfm the output so kubectl is your path
+az aks install-cli
+az aks get-credentials -g $rg -n $aks
+az aks check-acr -n $aks -g $rg --acr $acrhost
+az group delete --name $rg --no-wait
