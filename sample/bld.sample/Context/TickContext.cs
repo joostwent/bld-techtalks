@@ -37,6 +37,7 @@ namespace bld.sample.Context
             {
                 throw new Exception("No connection string configured; cannot continue");
             }
+            Console.WriteLine($"Found connection string {connectionString} in the keyvault.");
             var conn = new System.Data.SqlClient.SqlConnection(connectionString);
             conn.AccessToken = azureCredential.GetToken(new Azure.Core.TokenRequestContext(new string[] { "https://database.windows.net" })).Token;
             return conn;

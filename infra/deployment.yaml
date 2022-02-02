@@ -1,0 +1,31 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bld-identity-demo
+  namespace: pod-id
+spec:
+  replicas: 1
+  selector: 
+    matchLabels:
+      app: bld-identity-demo
+  template:
+    metadata:
+      labels:
+        app: bld-identity-demo
+        aadpodidbinding: pod-id-euw-aks-bld-2202
+    spec:
+      containers:
+        - name: ticks
+          image: acreuwaksbld2202.azurecr.io/sample/ticks:1.0.0
+          env:
+            - name: KEY_VAULT_NAME
+              value: kv2-euwaksbld2202
+          resources:
+            requests:
+              memory: "4Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+      restartPolicy: Always
