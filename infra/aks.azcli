@@ -2,6 +2,8 @@ az login
 # enable cluster monitoring
 az provider register --namespace Microsoft.OperationsManagement
 az provider register --namespace Microsoft.OperationalInsights
+az feature register --name EnablePodIdentityPreview --namespace Microsoft.ContainerService
+
 
 # init variables
 $suffix = "euw-aks-bld-2202"
@@ -18,15 +20,13 @@ $acrhost = "$acr.azurecr.io"
 $aks = "aks-$suffix"
 $sqlsrv = "sqlsrv-$suffix"
 $sqldb = "sqldb-$suffix"
-$kv = "kv-$suffix_short"
-$mngdid = "id-$suffix"
+$kv = "kv2-$suffix_short"
+$mngdid = "pod-id-$suffix"
+$aksid = "aks-id-$suffix"
 $location = "westeurope"
 
 # create resource group
 az group create --name $rg --location $location
-
-# create acr
-az acr create -n $acr -g $rg --sku basic
 
 # create vnet
 az network vnet delete --name $vnet --resource-group $rg
@@ -35,23 +35,28 @@ az network vnet subnet create --vnet-name $vnet --resource-group $rg --name $sne
 az network vnet subnet create --vnet-name $vnet --resource-group $rg --name $snetres --address-prefix 172.16.2.0/24
 $snetdetails = az network vnet subnet show --vnet-name $vnet --resource-group $rg --name $snetres | ConvertFrom-Json
 
+$aksIdentity = az identity create -g $rg -n $aksid -o json | ConvertFrom-Json
 # install aks
 az aks create --resource-group $rg `
     --name $aks `
     --node-count 1 `
-    --enable-addons monitoring `
     --enable-managed-identity `
     --enable-private-cluster `
+    --assign-identity $aksIdentity.id `
     --disable-public-fqdn `
     --network-plugin azure `
     --vnet-subnet-id $snetdetails.id 
 
 # attach acr after the managed identity above has been created
+# create acr
+az acr create -n $acr -g $rg --sku basic
 az aks update -n $aks -g $rg --attach-acr $acr
 
 # create azure sql database
 $currentUser = az ad signed-in-user show | ConvertFrom-Json
-az sql server create --enable-ad-only-auth --external-admin-principal-type User --external-admin-name $currentUser.displayName  --external-admin-sid $currentUser.objectId -g $rg -n $sqlsrv
+$podIdentity = az identity create -g $rg -n $mngdid -o json | ConvertFrom-Json
+$podIdentity = az identity show -g $rg -n $mngdid -o json | ConvertFrom-Json
+az sql server create --enable-ad-only-auth --external-admin-principal-type User --external-admin-name $podIdentity.name  --external-admin-sid $podIdentity.clientId -g $rg -n $sqlsrv
 az sql db create -g $rg -s $sqlsrv -n $sqldb --service-objective S0
 az network vnet subnet update -g $rg --vnet-name $vnet --name $snetres --service-endpoints Microsoft.Sql
 az sql server vnet-rule create --name "sqlvnet-$suffix" -g $rg -s $sqlsrv --subnet $snetres --vnet $vnet
@@ -72,15 +77,26 @@ $nodeResourceGroup = $aksDetails.nodeResourceGroup
 $dnsZones = az network private-dns zone list -g $nodeResourceGroup | ConvertFrom-Json
 az network private-dns record-set a add-record --ipv4-address $sqlDnsRecord.customDnsConfigs[0].ipAddresses[0] --record-set-name bldsql --resource-group $nodeResourceGroup --zone-name $dnsZones[0].name
 
+$sqlsrvDetails.fullyQualifiedDomainName
+
 # create key vault and connection string secret
 az keyvault create --resource-group $rg --name $kv
-$connectionString = "Server=tcp:bldsql,1433;Initial Catalog=sqldb-euw-aks-bld-2202;Persist Security Info=False;User ID={your_username};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=True;Authentication='Active Directory Integrated';"
+$fqdn = $sqlsrvDetails.fullyQualifiedDomainName
+$connectionString = "Data Source=$fqdn;Initial Catalog=$sqldb"
 az keyvault secret set --name ConnectionString --vault-name $kv --value "$connectionString"
 
-# create AAD Pod Identity and grant access to SQL and Keyvault
-$identity = az identity create -g $rg -n $mngdid -o json | ConvertFrom-Json
-az keyvault set-policy  --name $kv --spn $identity.clientId --secret-permissions get list
-az sql server ad-admin create --resource-group $rg --server-name $sqlsrv --display-name MANAGEDADMIN --object-id $identity.clientId
+# create AAD Pod Identity and grant access to SQL and Keyvault and assign Managed Identity Operator to AKS
+$account = az account show | ConvertFrom-Json
+$subscription = $account.id
+az role assignment create --role Reader --assignee $podIdentity.clientId --scope "/subscriptions/$subscription/resourcegroups/$rg"
+#$aksDetails = az aks show -n $aks -g $rg | ConvertFrom-Json
+az role assignment create --role "Managed Identity Operator" --assignee $aksIdentity.clientId --scope $podIdentity.id
+
+$aksid
+az keyvault set-policy  --name $kv --spn $podIdentity.clientId --secret-permissions get list
+az keyvault set-policy  --name $kv --spn $aksIdentity.clientId --secret-permissions get list
+#az aks show -g $rg -n $aks --query "identity"
+#az sql server ad-admin create --resource-group $rg --server-name $sqlsrv --display-name $currentUser.displayName --object-id $currentUser.objectId
 
 # enable AAD pod identity to AKS
 invoke-webrequest https://raw.githubusercontent.com/Azure/aad-pod-identity/master/deploy/infra/deployment-rbac.yaml -outfile infra\deployment-rbac.yaml
@@ -92,8 +108,8 @@ metadata: `
   name: $($mngdid) `
 spec: `
   type: 0 `
-  resourceID: $($identity.id) `
-  clientID: $($identity.clientId) `
+  resourceID: $($podIdentity.id) `
+  clientID: $($podIdentity.clientId) `
 --- `
 apiVersion: ""aadpodidentity.k8s.io/v1"" `
 kind: AzureIdentityBinding `
@@ -105,6 +121,32 @@ spec: `
 "
 $k8sAzureIdentityandBinding | Out-File infra\aad.yaml
 az aks command invoke -g $rg -n $aks --command 'kubectl apply -f aad.yaml' --file infra\aad.yaml
+
+
+
+# build the sample app and add it to the ACR
+cd C:\Sources\bld-techtalks\sample\bld.sample
+az acr build -t sample/ticks:1.0.0 -r $acr -f Dockerfile .
+cd .. 
+cd ..
+# deploy the sample app
+az aks command invoke -g $rg -n $aks --command 'kubectl delete -f deployment.yaml' --file infra\deployment.yaml
+az aks command invoke -g $rg -n $aks --command 'kubectl apply -f deployment.yaml' --file infra\deployment.yaml
+az aks command invoke -g $rg -n $aks --command 'kubectl apply -f demo.yaml' --file infra\demo.yaml
+az aks command invoke -g $rg -n $aks --command 'kubectl get pods -n pod-id'
+az aks command invoke -g $rg -n $aks --command 'kubectl logs -l app=bld-identity-demo -n pod-id --tail 250'
+az aks command invoke -g $rg -n $aks --command 'kubectl logs demo --tail 250 -n pod-id'
+az aks command invoke -g $rg -n $aks --command 'kubectl describe pod -l app=bld-identity-demo'
+az aks command result -g $rg -n $aks
+ 
+az aks pod-identity list --cluster-name $aks -g $rg
+az aks update --enable-pod-identity --name $aks -g $rg
+az aks pod-identity add --cluster-name $aks -g $rg --namespace pod-id --name $podIdentity.name --identity-resource-id $podIdentity.id --binding-selector pod-id-euw-aks-bld-2202-selector
+az aks pod-identity add --cluster-name $aks -g $rg --namespace pod-id --name $podIdentity.name --identity-resource-id $podIdentity.id
+az aks command invoke -g $rg -n $aks --command 'kubectl get azureidentity -n pod-id'
+az aks command invoke -g $rg -n $aks --command 'kubectl get AzureIdentity,AzureIdentityBinding -n pod-id'
+az aks command invoke -g $rg -n $aks --command 'kubectl describe "azureidentitybinding.aadpodidentity.k8s.io/pod-id-euw-aks-bld-2202-binding" -n pod-id'
+az aks pod-identity exception list --cluster-name $aks -g $rg
 
 # install kubetl if you haven't done already; rtfm the output so kubectl is your path
 az aks install-cli
