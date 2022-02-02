@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "bld.sample": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "KEY_VAULT_NAME": "kv-euwaksbld2202"
+      }
+    }
+  }
+}

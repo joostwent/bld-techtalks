@@ -18,6 +18,8 @@ $acrhost = "$acr.azurecr.io"
 $aks = "aks-$suffix"
 $sqlsrv = "sqlsrv-$suffix"
 $sqldb = "sqldb-$suffix"
+$kv = "kv-$suffix_short"
+$mngdid = "id-$suffix"
 $location = "westeurope"
 
 # create resource group
@@ -69,6 +71,40 @@ $aksDetails = az aks show -g $rg -n $aks | ConvertFrom-Json
 $nodeResourceGroup = $aksDetails.nodeResourceGroup
 $dnsZones = az network private-dns zone list -g $nodeResourceGroup | ConvertFrom-Json
 az network private-dns record-set a add-record --ipv4-address $sqlDnsRecord.customDnsConfigs[0].ipAddresses[0] --record-set-name bldsql --resource-group $nodeResourceGroup --zone-name $dnsZones[0].name
+
+# create key vault and connection string secret
+az keyvault create --resource-group $rg --name $kv
+$connectionString = "Server=tcp:bldsql,1433;Initial Catalog=sqldb-euw-aks-bld-2202;Persist Security Info=False;User ID={your_username};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=True;Authentication='Active Directory Integrated';"
+az keyvault secret set --name ConnectionString --vault-name $kv --value "$connectionString"
+
+# create AAD Pod Identity and grant access to SQL and Keyvault
+$identity = az identity create -g $rg -n $mngdid -o json | ConvertFrom-Json
+az keyvault set-policy  --name $kv --spn $identity.clientId --secret-permissions get list
+az sql server ad-admin create --resource-group $rg --server-name $sqlsrv --display-name MANAGEDADMIN --object-id $identity.clientId
+
+# enable AAD pod identity to AKS
+invoke-webrequest https://raw.githubusercontent.com/Azure/aad-pod-identity/master/deploy/infra/deployment-rbac.yaml -outfile infra\deployment-rbac.yaml
+az aks command invoke -g $rg -n $aks --command 'kubectl apply -f deployment-rbac.yaml' --file infra\deployment-rbac.yaml
+
+$k8sAzureIdentityandBinding = "apiVersion: ""aadpodidentity.k8s.io/v1""  `
+kind: AzureIdentity  `
+metadata: `
+  name: $($mngdid) `
+spec: `
+  type: 0 `
+  resourceID: $($identity.id) `
+  clientID: $($identity.clientId) `
+--- `
+apiVersion: ""aadpodidentity.k8s.io/v1"" `
+kind: AzureIdentityBinding `
+metadata: `
+  name: $($mngdid)-identity-binding `
+spec: `
+  azureIdentity: $($mngdid) `
+  selector: $($mngdid)-selector `
+"
+$k8sAzureIdentityandBinding | Out-File infra\aad.yaml
+az aks command invoke -g $rg -n $aks --command 'kubectl apply -f aad.yaml' --file infra\aad.yaml
 
 # install kubetl if you haven't done already; rtfm the output so kubectl is your path
 az aks install-cli

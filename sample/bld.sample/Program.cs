@@ -2,7 +2,7 @@
 using bld.sample.Model;
 using System;
 
-namespace bld.sample // Note: actual namespace depends on the project name.
+namespace bld.sample
 {
     internal class Program
     {
@@ -16,6 +16,7 @@ namespace bld.sample // Note: actual namespace depends on the project name.
                 Console.WriteLine("Terminating...");
             };
             var dbContext = new TickContext();
+            dbContext.Database.EnsureCreated();
             while (keepLooping)
             {
                 var tick = new Tick();
