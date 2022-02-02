@@ -5,6 +5,9 @@
       "environmentVariables": {
         "KEY_VAULT_NAME": "kv-euwaksbld2202"
       }
+    },
+    "Docker": {
+      "commandName": "Docker"
     }
   }
 }

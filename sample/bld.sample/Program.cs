@@ -22,7 +22,7 @@ namespace bld.sample
                 var tick = new Tick();
                 dbContext.Ticks.Add(tick);
                 dbContext.SaveChanges();
-                Console.WriteLine($"Writting tick {tick.TickTime:u}");
+                Console.WriteLine($"Writing tick {tick.TickTime:u}");
                 System.Threading.Thread.Sleep(7500);
             }
             Console.WriteLine("Terminated");
