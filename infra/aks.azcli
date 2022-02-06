@@ -3,7 +3,12 @@ az login
 az provider register --namespace Microsoft.OperationsManagement
 az provider register --namespace Microsoft.OperationalInsights
 az feature register --name EnablePodIdentityPreview --namespace Microsoft.ContainerService
+az feature register --name EnableOIDCIssuerPreview --namespace Microsoft.ContainerService
 
+az feature list -o table --query "[?contains(name, 'Microsoft.ContainerService/EnableOIDCIssuerPreview')].{Name:name,State:properties.state}"
+az provider register -n Microsoft.ContainerService
+az extension remove --name aks-preview
+az extension add --name aks-preview --version 0.5.50
 
 # init variables
 $suffix = "euw-aks-bld-2202"
@@ -23,6 +28,7 @@ $sqldb = "sqldb-$suffix"
 $kv = "kv2-$suffix_short"
 $mngdid = "pod-id-$suffix"
 $aksid = "aks-id-$suffix"
+$appregname = "appreg-aks-bld-techtalk-2202"
 $location = "westeurope"
 
 # create resource group
@@ -42,6 +48,7 @@ az aks create --resource-group $rg `
     --node-count 1 `
     --enable-managed-identity `
     --enable-private-cluster `
+    --enable-oidc-issuer `
     --assign-identity $aksIdentity.id `
     --disable-public-fqdn `
     --network-plugin azure `
@@ -51,6 +58,15 @@ az aks create --resource-group $rg `
 # create acr
 az acr create -n $acr -g $rg --sku basic
 az aks update -n $aks -g $rg --attach-acr $acr
+
+# create a app registration
+$appreg = az ad app create --display-name $appregname | ConvertFrom-Json
+az ad app credential list --id $appreg.appId
+$aksDetails = az aks show -n $aks -g $rg | ConvertFrom-Json
+az aks 
+az aks update -n $aks -g $rg --enable-oidc-issuer
+az rest --method POST --uri "https://graph.microsoft.com/beta/applications/$appreg.appId/federatedIdentityCredentials" --body '{"name":"GcpFederation","issuer":"https://accounts.google.com","subject":"112633961854638529490","description":"Testing","audiences":["api://AzureADTokenExchange"]}'
+az ad app delete --id 02155f3a-d33a-44e5-b82d-753e35228b00
 
 # create azure sql database
 $currentUser = az ad signed-in-user show | ConvertFrom-Json
@@ -148,7 +164,7 @@ az aks command invoke -g $rg -n $aks --command 'kubectl get AzureIdentity,AzureI
 az aks command invoke -g $rg -n $aks --command 'kubectl describe "azureidentitybinding.aadpodidentity.k8s.io/pod-id-euw-aks-bld-2202-binding" -n pod-id'
 az aks pod-identity exception list --cluster-name $aks -g $rg
 
-# install kubetl if you haven't done already; rtfm the output so kubectl is your path
+
 az aks install-cli
 az aks get-credentials -g $rg -n $aks
 az aks check-acr -n $aks -g $rg --acr $acrhost
