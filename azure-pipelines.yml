@@ -73,8 +73,8 @@ stages:
               targetFiles: '**/*.yml'
               encoding: 'auto'
               tokenPattern: 'custom'
-              tokenPrefix: '#{'
-              tokenSuffix: '}#'
+              tokenPrefix: '#('
+              tokenSuffix: ')'
               writeBOM: true
               verbosity: 'detailed'
               actionOnMissing: 'fail'
