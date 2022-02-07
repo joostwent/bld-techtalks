@@ -4,7 +4,7 @@ metadata:
   name: connectionstring
   type: Opaque
   stringData:
-    connectionstring: '#{connectionstring}#'
+    connectionstring: #(connectionstring)
 ---
 apiVersion : apps/v1
 kind: Deployment
