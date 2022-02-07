@@ -80,7 +80,7 @@ stages:
               actionOnMissing: 'fail'
               keepToken: false
               actionOnNoFiles: 'fail'
-              enableTransforms: false
+              enableTransforms: true
               useLegacyPattern: false
               enableTelemetry: true
           - task: KubernetesManifest@0
