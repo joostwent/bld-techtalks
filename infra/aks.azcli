@@ -11,8 +11,8 @@ az extension remove --name aks-preview
 az extension add --name aks-preview --version 0.5.50
 
 # init variables
-$suffix = "euw-aks-bld-2202"
-$suffix_short = "euwaksbld2202"
+$suffix = "akstalk-bld-2202"
+$suffix_short = "akstalkbld2202"
 $dns ="techtalk.bld"
 $rg = "rg-$suffix"
 $pubip = "pip-$suffix"
@@ -47,10 +47,7 @@ az aks create --resource-group $rg `
     --name $aks `
     --node-count 1 `
     --enable-managed-identity `
-    --enable-private-cluster `
-    --enable-oidc-issuer `
     --assign-identity $aksIdentity.id `
-    --disable-public-fqdn `
     --network-plugin azure `
     --vnet-subnet-id $snetdetails.id 
 
@@ -70,9 +67,10 @@ az ad app delete --id 02155f3a-d33a-44e5-b82d-753e35228b00
 
 # create azure sql database
 $currentUser = az ad signed-in-user show | ConvertFrom-Json
-$podIdentity = az identity create -g $rg -n $mngdid -o json | ConvertFrom-Json
-$podIdentity = az identity show -g $rg -n $mngdid -o json | ConvertFrom-Json
-az sql server create --enable-ad-only-auth --external-admin-principal-type User --external-admin-name $podIdentity.name  --external-admin-sid $podIdentity.clientId -g $rg -n $sqlsrv
+#$podIdentity = az identity create -g $rg -n $mngdid -o json | ConvertFrom-Json
+#$podIdentity = az identity show -g $rg -n $mngdid -o json | ConvertFrom-Json
+$dbPwd = "bY*d^Di55Loz"
+az sql server create --external-admin-principal-type User --external-admin-name $currentUser.displayName  --external-admin-sid $currentUser.objectId -g $rg -n $sqlsrv --admin-user bld --admin-password $dbPwd
 az sql db create -g $rg -s $sqlsrv -n $sqldb --service-objective S0
 az network vnet subnet update -g $rg --vnet-name $vnet --name $snetres --service-endpoints Microsoft.Sql
 az sql server vnet-rule create --name "sqlvnet-$suffix" -g $rg -s $sqlsrv --subnet $snetres --vnet $vnet
@@ -98,7 +96,7 @@ $sqlsrvDetails.fullyQualifiedDomainName
 # create key vault and connection string secret
 az keyvault create --resource-group $rg --name $kv
 $fqdn = $sqlsrvDetails.fullyQualifiedDomainName
-$connectionString = "Data Source=$fqdn;Initial Catalog=$sqldb"
+$connectionString = "Data Source=$fqdn;Initial Catalog=$sqldb;User Id=bld;Password=$dbPwd"
 az keyvault secret set --name ConnectionString --vault-name $kv --value "$connectionString"
 
 # create AAD Pod Identity and grant access to SQL and Keyvault and assign Managed Identity Operator to AKS

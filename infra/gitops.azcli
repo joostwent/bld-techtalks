@@ -1,0 +1,34 @@
+az extension add --name k8s-configuration
+
+$suffix = "euw-aks-bld-2202"
+$suffix_short = "euwaksbld2202"
+$dns ="techtalk.bld"
+$rg = "rg-$suffix"
+$pubip = "pip-$suffix"
+$vnet = "vnet-$suffix"
+$dnslink = "dns-lnk-$suffix"
+$snet = "snet-$suffix"
+$snetres = "snet-resources-$suffix"
+$acr = "acr$suffix_short"
+$acrhost = "$acr.azurecr.io"
+$aks = "aks-$suffix"
+$sqlsrv = "sqlsrv-$suffix"
+$sqldb = "sqldb-$suffix"
+$kv = "kv2-$suffix_short"
+$mngdid = "pod-id-$suffix"
+$aksid = "aks-id-$suffix"
+$appregname = "appreg-aks-bld-techtalk-2202"
+$location = "westeurope"
+
+
+az k8s-configuration flux create `
+    --name gitops-config `
+    --cluster-name $aks `
+    --resource-group $rg `
+    --kind git `
+    --url https://github.com/joostwent/bld-techtalks.git `
+    --scope namespace `
+    --cluster-type managedClusters `
+    --branch master
+
+az aks command invoke -n $aks -g $rg --command 'flux bootstrap github --owner joostwent --repository bld-techtalks --path gitops --personal --branch master'

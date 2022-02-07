@@ -24,22 +24,8 @@ namespace bld.sample.Context
 
         private static System.Data.SqlClient.SqlConnection GetConnectionStringFromKeyVault()
         {
-            string keyVaultName = Environment.GetEnvironmentVariable("KEY_VAULT_NAME");
-            if (string.IsNullOrEmpty(keyVaultName))
-            {
-                throw new Exception("Kevault not configured; cannot continue");
-            }
-            var kvUri = "https://" + keyVaultName + ".vault.azure.net";
-            var azureCredential = new DefaultAzureCredential();
-            var client = new SecretClient(new Uri(kvUri), azureCredential);
-            var connectionString = client.GetSecretAsync("ConnectionString").GetAwaiter().GetResult().Value.Value;
-            if (string.IsNullOrEmpty(connectionString))
-            {
-                throw new Exception("No connection string configured; cannot continue");
-            }
-            Console.WriteLine($"Found connection string {connectionString} in the keyvault.");
+            var connectionString = Environment.GetEnvironmentVariable("ConnectionString");
             var conn = new System.Data.SqlClient.SqlConnection(connectionString);
-            conn.AccessToken = azureCredential.GetToken(new Azure.Core.TokenRequestContext(new string[] { "https://database.windows.net" })).Token;
             return conn;
         }
     }
