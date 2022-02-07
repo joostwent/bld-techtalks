@@ -9,18 +9,21 @@ resources:
 - repo: self
 
 variables:
-
-  # Container registry service connection established during pipeline creation
-  dockerRegistryServiceConnection: '2d871628-9898-4d57-be60-1df8260b1245'
-  imageRepository: 'sampleticks'
-  containerRegistry: 'acrakstalkbld2202.azurecr.io'
-  dockerfilePath: '**/Dockerfile'
-  tag: '$(Build.BuildId)'
-  imagePullSecret: 'acrakstalkbld220243c6-auth'
-
-  # Agent VM image name
-  vmImageName: 'ubuntu-latest'
-
+- group: Secrets
+- name: dockerRegistryServiceConnection
+  value: '2d871628-9898-4d57-be60-1df8260b1245'
+- name: imageRepository
+  value: 'sampleticks'
+- name: containerRegistry
+  value: 'acrakstalkbld2202.azurecr.io'
+- name: dockerfilePath
+  value: '**/Dockerfile'
+- name: tag
+  value: '$(Build.BuildId)'
+- name: imagePullSecret
+  value: 'acrakstalkbld220243c6-auth'
+- name: vmImageName
+  value: 'ubuntu-latest'
 
 stages:
 - stage: Build
@@ -66,7 +69,7 @@ stages:
               dockerRegistryEndpoint: $(dockerRegistryServiceConnection)
           - task: replacetokens@5
             inputs:
-              rootDirectory: 'manifests'
+              rootDirectory: '$(Pipeline.Workspace)/manifests'
               targetFiles: '**/*.yml'
               encoding: 'auto'
               tokenPattern: 'default'
