@@ -3,7 +3,7 @@ kind: Secret
 metadata:
   name: connectionstring
   type: Opaque
-  stringData:
+  data:
     connectionstring: #base64((connectionstring))
 ---
 apiVersion : apps/v1
