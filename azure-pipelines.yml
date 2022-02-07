@@ -64,7 +64,20 @@ stages:
               action: createSecret
               secretName: $(imagePullSecret)
               dockerRegistryEndpoint: $(dockerRegistryServiceConnection)
-
+          - task: replacetokens@5
+            inputs:
+              rootDirectory: 'manifests'
+              targetFiles: '**/*.yml'
+              encoding: 'auto'
+              tokenPattern: 'default'
+              writeBOM: true
+              verbosity: 'detailed'
+              actionOnMissing: 'fail'
+              keepToken: false
+              actionOnNoFiles: 'fail'
+              enableTransforms: false
+              useLegacyPattern: false
+              enableTelemetry: true
           - task: KubernetesManifest@0
             displayName: Deploy to Kubernetes cluster
             inputs:
