@@ -1,0 +1,19 @@
+apiVersion : apps/v1
+kind: Deployment
+metadata:
+  name: sampleticks 
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sampleticks
+  template:
+    metadata:
+      labels:
+        app: sampleticks 
+    spec:
+      containers:
+        - name: sampleticks 
+          image: acrakstalkbld2202.azurecr.io/sampleticks
+          ports:
+          - containerPort: 80
