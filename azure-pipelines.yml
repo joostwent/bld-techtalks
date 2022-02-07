@@ -67,12 +67,19 @@ stages:
               action: createSecret
               secretName: $(imagePullSecret)
               dockerRegistryEndpoint: $(dockerRegistryServiceConnection)
+          - task: FileTransform@1
+            inputs:
+              folderPath: '$(Pipeline.Workspace)/manifests'
+              fileType: 'json'
+              targetFiles: '*.yml'
           - task: replacetokens@5
             inputs:
               rootDirectory: '$(Pipeline.Workspace)/manifests'
               targetFiles: '**/*.yml'
               encoding: 'auto'
-              tokenPattern: 'default'
+              tokenPattern: 'custom'
+              tokenPrefix: '#{'
+              tokenSuffix: '}#'
               writeBOM: true
               verbosity: 'detailed'
               actionOnMissing: 'fail'
