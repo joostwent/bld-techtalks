@@ -16,13 +16,13 @@ namespace bld.sample.Context
     {
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            var connection = GetConnectionStringFromKeyVault();
+            var connection = GetConnection();
             optionsBuilder.UseSqlServer(connection);
         }
 
         internal DbSet<Tick> Ticks { get; set; }
 
-        private static System.Data.SqlClient.SqlConnection GetConnectionStringFromKeyVault()
+        private static System.Data.SqlClient.SqlConnection GetConnection()
         {
             var connectionString = Environment.GetEnvironmentVariable("ConnectionString");
             var conn = new System.Data.SqlClient.SqlConnection(connectionString);
