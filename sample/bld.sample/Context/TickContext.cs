@@ -17,7 +17,23 @@ namespace bld.sample.Context
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             var connection = GetConnection();
+            WriteSqlServerIpAddress(connection);
             optionsBuilder.UseSqlServer(connection);
+        }
+
+        private void WriteSqlServerIpAddress(System.Data.SqlClient.SqlConnection connection)
+        {
+            try
+            {
+                var serverName = connection.DataSource;
+                var hostEntry = System.Net.Dns.GetHostEntry(serverName);
+                string addresses = string.Join(";", hostEntry.AddressList.Select(ip => ip.ToString()).ToArray());
+                Console.WriteLine($"Detected IP addresses {addresses} for server {serverName}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
         }
 
         internal DbSet<Tick> Ticks { get; set; }
