@@ -1,0 +1,47 @@
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: azure-kvname-user-msi
+  namespace: csi
+spec:
+  provider: azure
+  parameters:
+    usePodIdentity: "false"
+    useVMManagedIdentity: "true"          
+    userAssignedIdentityID: 26b3ec99-b536-4650-bfcd-545c8a6f3a6b  
+    keyvaultName: kv2-akstalkbld2202
+    objects:  |
+      array:
+        - |
+          objectName: csi-sample
+          objectType: secret              
+          objectVersion: ""               
+    tenantId: 76a2ae5a-9f00-4f6b-95ed-5d33d77c4d61
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: busybox-secrets-store-inline-user-msi
+  namespace: csi
+spec:
+  containers:
+    - name: busybox
+      image: k8s.gcr.io/e2e-test-images/busybox:1.29-1
+      command:
+        - "/bin/sleep"
+        - "10000"
+      resources:
+        limits:
+          memory: "64Mi"
+          cpu: "50m"
+      volumeMounts:
+      - name: secrets-store01-inline
+        mountPath: "/mnt/secrets-store"
+        readOnly: true
+  volumes:
+    - name: secrets-store01-inline
+      csi:
+        driver: secrets-store.csi.k8s.io
+        readOnly: true
+        volumeAttributes:
+          secretProviderClass: "azure-kvname-user-msi"

@@ -55,6 +55,7 @@ az aks create --resource-group $rg `
 # create acr
 az acr create -n $acr -g $rg --sku basic
 az aks update -n $aks -g $rg --attach-acr $acr
+az aks enable-addons --addons azure-keyvault-secrets-provider --name $aks --resource-group $rg
 
 # create a app registration
 $appreg = az ad app create --display-name $appregname | ConvertFrom-Json
@@ -99,14 +100,29 @@ $fqdn = $sqlsrvDetails.fullyQualifiedDomainName
 $connectionString = "Data Source=$fqdn;Initial Catalog=$sqldb;User Id=bld;Password=$dbPwd"
 az keyvault secret set --name ConnectionString --vault-name $kv --value "$connectionString"
 
+$keyvaultClientId = az aks show -g $rg -n $aks --query addonProfiles.azureKeyvaultSecretsProvider.identity.clientId -o tsv
+az keyvault set-policy -n $kv --key-permissions get --spn $keyvaultClientId
+az keyvault set-policy -n $kv --secret-permissions get --spn $keyvaultClientId
+az keyvault set-policy -n $kv --certificate-permissions get --spn $keyvaultClientId
+az keyvault secret set --name csi-sample --vault-name $kv --value "This is something really secret"
 
 az aks install-cli
 az aks get-credentials -g $rg -n $aks
 az aks check-acr -n $aks -g $rg --acr $acrhost
 az group delete --name $rg --no-wait
 
+kubectl delete -f C:\Sources\bld-techtalks\manifests\keyvault.yml
+kubectl apply -f C:\Sources\bld-techtalks\manifests\keyvault.yml
+kubectl exec --namespace=csi busybox-secrets-store-inline-user-msi -- cat /mnt/secrets-store/csi-sample
+
+kubectl delete -f C:\Sources\bld-techtalks\manifests\busybox.yml
+kubectl apply -f C:\Sources\bld-techtalks\manifests\busybox.yml
+kubectl exec -it --namespace=default busybox -- ping sqlsrv-akstalk-bld-2202.database.windows.net -t 1
+
+
 kubectl get namespaces
 kubectl delete pod sampleticks-7b579774f4-wbl6v -n secrets
+kubectl delete deployment sampleticks -n secrets
 kubectl get pods -n secrets -w
 kubectl logs -l app=sampleticks -n secrets --tail 250
 kubectl get secrets --all-namespaces

@@ -1,0 +1,16 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: busybox
+  namespace: default
+spec:
+  containers:
+    - name: busybox
+      image: busybox
+      command:
+        - "/bin/sleep"
+        - "10000"
+      resources:
+        limits:
+          memory: "64Mi"
+          cpu: "50m"
