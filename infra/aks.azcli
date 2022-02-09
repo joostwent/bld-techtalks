@@ -99,71 +99,14 @@ $fqdn = $sqlsrvDetails.fullyQualifiedDomainName
 $connectionString = "Data Source=$fqdn;Initial Catalog=$sqldb;User Id=bld;Password=$dbPwd"
 az keyvault secret set --name ConnectionString --vault-name $kv --value "$connectionString"
 
-# create AAD Pod Identity and grant access to SQL and Keyvault and assign Managed Identity Operator to AKS
-$account = az account show | ConvertFrom-Json
-$subscription = $account.id
-az role assignment create --role Reader --assignee $podIdentity.clientId --scope "/subscriptions/$subscription/resourcegroups/$rg"
-#$aksDetails = az aks show -n $aks -g $rg | ConvertFrom-Json
-az role assignment create --role "Managed Identity Operator" --assignee $aksIdentity.clientId --scope $podIdentity.id
-
-$aksid
-az keyvault set-policy  --name $kv --spn $podIdentity.clientId --secret-permissions get list
-az keyvault set-policy  --name $kv --spn $aksIdentity.clientId --secret-permissions get list
-#az aks show -g $rg -n $aks --query "identity"
-#az sql server ad-admin create --resource-group $rg --server-name $sqlsrv --display-name $currentUser.displayName --object-id $currentUser.objectId
-
-# enable AAD pod identity to AKS
-invoke-webrequest https://raw.githubusercontent.com/Azure/aad-pod-identity/master/deploy/infra/deployment-rbac.yaml -outfile infra\deployment-rbac.yaml
-az aks command invoke -g $rg -n $aks --command 'kubectl apply -f deployment-rbac.yaml' --file infra\deployment-rbac.yaml
-
-$k8sAzureIdentityandBinding = "apiVersion: ""aadpodidentity.k8s.io/v1""  `
-kind: AzureIdentity  `
-metadata: `
-  name: $($mngdid) `
-spec: `
-  type: 0 `
-  resourceID: $($podIdentity.id) `
-  clientID: $($podIdentity.clientId) `
---- `
-apiVersion: ""aadpodidentity.k8s.io/v1"" `
-kind: AzureIdentityBinding `
-metadata: `
-  name: $($mngdid)-identity-binding `
-spec: `
-  azureIdentity: $($mngdid) `
-  selector: $($mngdid)-selector `
-"
-$k8sAzureIdentityandBinding | Out-File infra\aad.yaml
-az aks command invoke -g $rg -n $aks --command 'kubectl apply -f aad.yaml' --file infra\aad.yaml
-
-
-
-# build the sample app and add it to the ACR
-cd C:\Sources\bld-techtalks\sample\bld.sample
-az acr build -t sample/ticks:1.0.0 -r $acr -f Dockerfile .
-cd .. 
-cd ..
-# deploy the sample app
-az aks command invoke -g $rg -n $aks --command 'kubectl delete -f deployment.yaml' --file infra\deployment.yaml
-az aks command invoke -g $rg -n $aks --command 'kubectl apply -f deployment.yaml' --file infra\deployment.yaml
-az aks command invoke -g $rg -n $aks --command 'kubectl apply -f demo.yaml' --file infra\demo.yaml
-az aks command invoke -g $rg -n $aks --command 'kubectl get pods -n pod-id'
-az aks command invoke -g $rg -n $aks --command 'kubectl logs -l app=bld-identity-demo -n pod-id --tail 250'
-az aks command invoke -g $rg -n $aks --command 'kubectl logs demo --tail 250 -n pod-id'
-az aks command invoke -g $rg -n $aks --command 'kubectl describe pod -l app=bld-identity-demo'
-az aks command result -g $rg -n $aks
- 
-az aks pod-identity list --cluster-name $aks -g $rg
-az aks update --enable-pod-identity --name $aks -g $rg
-az aks pod-identity add --cluster-name $aks -g $rg --namespace pod-id --name $podIdentity.name --identity-resource-id $podIdentity.id --binding-selector pod-id-euw-aks-bld-2202-selector
-az aks pod-identity add --cluster-name $aks -g $rg --namespace pod-id --name $podIdentity.name --identity-resource-id $podIdentity.id
-az aks command invoke -g $rg -n $aks --command 'kubectl get azureidentity -n pod-id'
-az aks command invoke -g $rg -n $aks --command 'kubectl get AzureIdentity,AzureIdentityBinding -n pod-id'
-az aks command invoke -g $rg -n $aks --command 'kubectl describe "azureidentitybinding.aadpodidentity.k8s.io/pod-id-euw-aks-bld-2202-binding" -n pod-id'
-az aks pod-identity exception list --cluster-name $aks -g $rg
-
 
 az aks install-cli
 az aks get-credentials -g $rg -n $aks
 az aks check-acr -n $aks -g $rg --acr $acrhost
 az group delete --name $rg --no-wait
+
+kubectl get namespaces
+kubectl delete pod sampleticks-7b579774f4-wbl6v -n secrets
+kubectl get pods -n secrets -w
+kubectl logs -l app=sampleticks -n secrets --tail 250
+kubectl get secrets --all-namespaces
