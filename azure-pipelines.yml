@@ -9,7 +9,6 @@ resources:
 - repo: self
 
 variables:
-- group: Secrets
 - name: dockerRegistryServiceConnection
   value: '2d871628-9898-4d57-be60-1df8260b1245'
 - name: imageRepository
@@ -67,6 +66,12 @@ stages:
               action: createSecret
               secretName: $(imagePullSecret)
               dockerRegistryEndpoint: $(dockerRegistryServiceConnection)
+          - task: AzureKeyVault@2
+            inputs:
+              azureSubscription: 'Visual Studio Enterprise Subscription (9b5d7944-a55e-40f5-bb86-3f7b81dc13ba)'
+              KeyVaultName: 'kv2-akstalkbld2202'
+              SecretsFilter: '*'
+              RunAsPreJob: true
           - task: replacetokens@5
             inputs:
               rootDirectory: '$(Pipeline.Workspace)/manifests'
