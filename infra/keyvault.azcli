@@ -1,0 +1,4 @@
+kubectl delete -f C:\Sources\bld-techtalks\manifests\keyvault.yml
+kubectl apply -f C:\Sources\bld-techtalks\manifests\keyvault.yml
+kubectl exec --namespace=csi busybox-secrets-store-inline-user-msi -- ls /mnt/secrets-store
+kubectl exec --namespace=csi busybox-secrets-store-inline-user-msi -- cat /mnt/secrets-store/csi-sample

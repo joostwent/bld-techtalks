@@ -1,0 +1,6 @@
+kubectl delete -f C:\Sources\bld-techtalks\manifests\busybox.yml
+
+
+kubectl apply -f C:\Sources\bld-techtalks\manifests\busybox.yml
+
+kubectl exec -it --namespace=default busybox -- ping sqlsrv-akstalk-bld-2202.database.windows.net -t 1
